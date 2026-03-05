@@ -1,6 +1,6 @@
 ---
 title: "Computational Text Analysis - Exercise 3: Comparison and complexity"
-author: "[your name here]"
+author: "Leung Ka Hei"
 date: "25/02/2026"
 output: html_document
 ---
@@ -75,7 +75,7 @@ We are now ready to reformat the data into a document feature matrix.
 
 ```{r}
 dfmat <- dfm(tokens(tweets_corpus, remove_punct = TRUE)) %>%
-  dfm_remove(pattern = stopwords("english"))
+  dfm_remove(pattern = stopwords("english")) #tells quanteda to remove all English stopwords
 
 dfmat
 ```
@@ -94,8 +94,10 @@ Here's an example of the correlations between the combined tweets of 5 of the MP
 
 ```{r}
 corrmat <- dfmat %>%
-  dfm_group(groups = username) %>%
-  textstat_simil(margin = "documents", method = "correlation")
+  dfm_group(groups = username) %>% #groupby+summarise
+  textstat_simil(margin = "documents", method = "correlation") #computes how similar each document is to every other document, using correlation as the similarity measure
+
+#correlation: same word? similar proportion? same vocabulary space?
 
 corrmat[1:5,1:5]
 
@@ -116,6 +118,7 @@ We first get similarities between the text of MP tweets and all other MPs.
 ```{r}
 
 #estimate similarity, grouping by username
+#cosine-> vocabulary overlap and direction, not about: style, tone, abstract or not, which voice, distributional shape, patterns
 
 cos_sim <- dfmat %>%
   dfm_group(groups = username) %>%
@@ -132,7 +135,8 @@ We first convert the `textstat_simil()` output to a matrix.
 ```{r}
 
 cosmat <- as.matrix(cos_sim) #convert to a matrix
-  
+
+head(cosmat)
 ```
 
 And we can see that the 23rd row of this matrix contains the similarity measures with the Theresa May tweets. 
@@ -141,7 +145,7 @@ We take this row, removing the similarity of Theresa May with herself (which wil
 
 ```{r}
 #generate data frame keeping only the row for Theresa May
-cosmatdf <- as.data.frame(cosmat[23, c(1:22, 24)])
+cosmatdf <- as.data.frame(cosmat[23, c(1:22, 24)]) #keeps row correct in meaning 23 but drops column 23, leaving only columns 1–22 and 24
 ```
 
 We then rename the cosine similarity column with an appropriate name and convert row names to a column variable so that we have cells containing information on the MP to which the cosine similarity measure refers. 
@@ -151,7 +155,7 @@ We then rename the cosine similarity column with an appropriate name and convert
 colnames(cosmatdf) <- "corr_may"
   
 #create column variable from rownames
-cosmatdf <- tibble::rownames_to_column(cosmatdf, "username")
+cosmatdf <- tibble::rownames_to_column(cosmatdf, "username") #tibble package -> takes row names 1, 2,3,4 turn them to column called usename
 ```
 
 And like so we have our data in tidy format, which we can then plot like so. 
@@ -173,14 +177,19 @@ Combining these steps into a single `for` loop, we can see how our different sim
 #specify different similarity measures to explore
 methods <- c("correlation", "cosine", "dice", "edice")
 
+#correlation: compares patterns of word usage -> style, distribution, or relative emphasis, patterns esp.
+#consine: compares relative proportions of words, so it detects ideology only when ideology consistent vocabulary is expressed through choices
+#dice: only at whether a word is present or absent, and then measures how much the two documents’ sets of unique words overlap
+#edice: counting how much the two documents’ word‑frequency amounts overlap
+
 #create empty dataframe
 testdf_all <- data.frame()
 
 #gen for loop across methods types
-for (i in seq_along(methods)) {
+for (i in seq_along(methods)) { 
   
   #pass method to character string object
-  sim_method <- methods[[i]]
+  sim_method <- methods[[i]] #i = 1 runs the code using "correlation", i = 2 runs it using "cosine", and the loop continues the same way for "dice" and "edice"
   
   #estimate similarity, grouping by username
   test <- dfmat %>%
@@ -247,7 +256,7 @@ The data contain speeches by four different politicians, each of whom are positi
 We can then calculate the Flesch-Kincaid readability/complexity score with the `quanteda.textstats` package like so.
 
 ```{r}
-speeches$flesch.kincaid <- textstat_readability(speeches$text, measure = "Flesch.Kincaid")
+speeches$flesch.kincaid <- textstat_readability(speeches$text, measure = "Flesch.Kincaid") #Calculate the readability score of each document using the Flesch–Kincaid formula： produces a grade‑level number indicating the years of education typically needed to comprehend the text
 
 # returned as quanteda data.frame with document-level information;
 # need just the score:
@@ -265,6 +274,7 @@ sum_corpus <- speeches %>%
                    N=length(speaker))
 
 # calculate standard errors and confidence intervals
+#to see how trustworthy each speaker’s average readability score is
 sum_corpus$se <- sum_corpus$SD / sqrt(sum_corpus$N)
 sum_corpus$min <- sum_corpus$mean - 1.96*sum_corpus$se
 sum_corpus$max <- sum_corpus$mean + 1.96*sum_corpus$se
@@ -295,5 +305,248 @@ ggplot(sum_corpus, aes(x=speaker, y=mean)) +
 ## Exercises
 
 1. Compute distance measures such as "euclidean" or "manhattan" for the MP tweets as above, comparing between tweets by MPs and tweets by PM, Theresa May. 
+```{r}
+dfmat_ <- dfm(tokens(tweets_corpus, remove_punct = TRUE)) %>%
+  dfm_remove(pattern = stopwords("english"))
+
+#group tweets by username
+dfmat_grouped <- dfm_group(dfmat_, groups = username)
+
+#calculating distance: Euclidean
+dist_euc <- textstat_dist(dfmat_grouped, method = "euclidean")
+
+#calculating distance: Manhattan
+dist_man <- textstat_dist(dfmat_grouped, method = "manhattan")
+
+#find Theresa May's row
+rownames(dfmat_grouped)
+
+#convert to matrix
+mat_euc <- as.matrix(dist_euc) 
+mat_man <- as.matrix(dist_man)
+
+#generate data frame keeping only the row for Theresa May
+euc_df <- as.data.frame(mat_euc[23, c(1:22, 24)])
+man_df <- as.data.frame(mat_man[23, c(1:22, 24)])
+
+#rename column
+colnames(euc_df) <- "corr_may"
+colnames(man_df) <- "corr_may"
+
+#create column variable from rownames
+euc_df <- tibble::rownames_to_column(euc_df, "username")
+man_df <- tibble::rownames_to_column(man_df, "username")
+
+#plot
+ggplot(euc_df) +
+  geom_point(aes(x=reorder(username, -corr_may), y= corr_may)) + 
+  coord_flip() +
+  xlab("MP username") +
+  ylab("Euclidean distance score") + 
+  theme_minimal()
+
+ggplot(man_df) +
+  geom_point(aes(x=reorder(username, -corr_may), y= corr_may)) + 
+  coord_flip() +
+  xlab("MP username") +
+  ylab("Manhattan distance score") + 
+  theme_minimal()
+
+#combining into a single step by loop
+#specify distance measure
+methods_ <- c("euclidean", "manhattan")
+
+#create empty dataframe for bind the results of two methods together
+testdf_both <- data.frame()
+
+#gen for loop across methods types
+for (i in seq_along(methods_)) {
+  
+  #pass method to character string object
+  dis_method <- methods_[[i]]
+  
+  #estimate distance, grouping by username
+  test_ <- dfmat %>%
+    dfm_group(groups = username) %>%
+    textstat_dist(margin = "documents", method = dis_method) #specify method here as character object created above
+  
+  test_mat <- as.matrix(test_) #convert to a matrix
+  
+  #generate data frame keeping only the row for Theresa May
+  testdf <- as.data.frame(test_mat[23, c(1:22, 24)])
+  
+  #rename column
+  colnames(testdf) <- "corr_may"
+  
+  #create column variable from rownames
+  testdf <- tibble::rownames_to_column(testdf, "username")
+  
+  #record method in new column variable
+  testdf$method <- dis_method
+
+  #bind all together
+  testdf_both <- rbind(testdf_both, testdf)  
+  
+}
+
+#create variable that is the mean of distance scores for each MP
+testdf_both <- testdf_both %>%
+  group_by(username) %>%
+  mutate(mean_dis = mean(corr_may))
+
+#plot
+ggplot(testdf_both) +
+  geom_point( aes(x=reorder(username, -mean_dis), y= corr_may, color = method)) + 
+  coord_flip() +
+  xlab("MP username") +
+  ylab("Distance score") + 
+  theme_minimal()
+```
+The plot shows how closely each individual MP’s tweeting style aligns with Theresa May’s by comparing their document‑feature vectors using Euclidean and Manhattan distance. The red dots show the Euclidean distance between each MP’s tweets and Theresa May’s tweets, while the blue dots show the corresponding Manhattan distance. Since the distance reflects dissimilarity, MPs with the greater scores meaning use language that diverges more from Theresa May's tweets, and those who with smaller scores meaning use language more similar to May's tweets in vocabulary and thematic emphasis. In the plot, Manhattan distances are larger compared to Euclidean distances, yet the overall ordering of MPs remain stable. This indicates that the choice of metric does not change the substantive interpretation.
+
+From the plot, MPs such as daviddavismp and philiphammonduk have distance score nearly to zero, ndicating that their tweeting style is highly similar to Theresa May’s. Meanwhile, MPs such as brandonlewis and pennymordanut score over 15,000 and 20,000 in Manhattan distance scale, reflecting that they have more distinct communication priorities or stylistic choices from Theresa May's. Overall,  the plot highlights meaningful variation within the Conservative Party, with some MPs echoing May’s themes more closely than others.
+
 2. Estimate at least three other complexity measures for the EU speeches as above. Consider how the results compare to the Flesch-Kincaid measure used in the article by @schoonvelde_liberals_2019.
+```{r}
+#load data
+speeches_ <- readRDS(gzcon(url("https://github.com/cjbarrie/CTA-ED/blob/main/data/comparison-complexity/speeches.rds?raw=true")))
+
+head(speeches_)
+
+#compute the baseline
+fk <- textstat_readability(speeches_$text, measure = "Flesch.Kincaid")
+speeches_$flesch.kincaid <- fk$Flesch.Kincaid
+
+#mean and SE
+sum_corpus <- speeches_ %>%
+  group_by(speaker) %>%
+  summarise(
+    mean = mean(flesch.kincaid, na.rm = TRUE),
+    SD = sd(flesch.kincaid, na.rm = TRUE),
+    N = length(speaker)
+  )
+
+sum_corpus$se <- sum_corpus$SD / sqrt(sum_corpus$N)
+sum_corpus$min <- sum_corpus$mean - 1.96 * sum_corpus$se
+sum_corpus$max <- sum_corpus$mean + 1.96 * sum_corpus$se
+
+#computing other three methods
+others <- textstat_readability(
+  speeches_$text,
+  measure = c("Flesch", "FOG", "Coleman.Liau", "SMOG")
+)
+
+speeches_$flesch <- others$Flesch
+speeches_$fog <- others$FOG
+speeches_$coleman <- others$Coleman.Liau
+speeches_$smog <- others$SMOG
+
+#summaries with one loop
+measures <- c("flesch.kincaid", "flesch", "fog", "coleman", "smog")
+
+summary_list <- list()
+
+for (m in measures) {
+  
+  tmp <- speeches_ %>%
+    group_by(speaker) %>%
+    summarise(
+      mean = mean(.data[[m]], na.rm = TRUE),
+      SD   = sd(.data[[m]], na.rm = TRUE),
+      N    = n()
+    ) %>%
+    mutate(
+      se  = SD / sqrt(N),
+      min = mean - 1.96 * se,
+      max = mean + 1.96 * se,
+      measure = m
+    )
+  
+  summary_list[[m]] <- tmp
+}
+
+sum_all <- bind_rows(summary_list)
+
+#plot
+ggplot(sum_all, aes(x = reorder(speaker, -mean), 
+                    y = mean, 
+                    colour = measure)) +
+  geom_pointrange(aes(ymin = min, ymax = max),
+                  position = position_dodge(width = 0.6)) +
+  coord_flip() +
+  theme_minimal() +
+  xlab("Speaker") +
+  ylab("Mean readability score (95% CI)")
+
+
+```
+The figure compares the readability of speeches delivered by Zapatero, Rajoy, Brown, and Cameron across five widely used readability formulas. While the five readability formula in the plot operate on different scales, it means a 'higher' or 'lower' score does not always correspond to the same interpretation across measures. For Flesch Ease and Coleman-Liau, higher values indicating easier-to-read text, conversely, for Flesch-kincaid, Gunning Fog, and SMOG, lower values indicating easier text for reading. Since each formula captures a different dimension of linguistic complexity, including sentence length, word length, and proportion of complex words, the relative positions of the four speakers must be interpreted within each metric rather than compared directly across them.
+
+Even though the five readability formulas operate on different scales, the overall pattern across speakers is broadly consistent. Zapatero receives the lowerst in both Flesch Ease and Coleman score with approximately 40 respectively, and the highest scores on Flesch-kincaid, Gunning Fog, and SMOG between 15-20 each, revealing that his speeches are the hardest to read in both sentence structure and vocabulary. Cameron, on the contrary, score highest on the Flesch Ease and Coleman-Liau scale on approximately 50-55 perspectively, and lowest scores in Flesch-kincaid, Gunning Fog, and SMOG that all below 15. This pattern indicates that Cameron's speeches are the easiest to read overall, combining relatively simple sentence structure with less complex vocabulary. Rajoy and Brown generally falls between these extremes. 
+
+Together, these results highlight stable stylistic differences among the four leaders, with Zapatero combining dense sentence structure with simple vocabulary, and Cameron combining simpler syntax with more complex word choice.
+
 3. (Advanced---optional) Estimate similarity scores between the MP tweets and the PM tweets for each week contained in the data. Plot the results. 
+```{r}
+#Create the PM/MP role variable
+tweets <- tweets %>%
+  mutate(role = ifelse(username == "theresa_may", "PM", "MP"))
+
+#turn date to week 
+tweets <- tweets %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(date) %>%
+  mutate(week = as.numeric(format(date, "%U"))) #Convert the date into a Sunday‑based week number, where early January days are week 0
+
+#combine tweets per week and username
+weekly_text <- tweets %>%
+  group_by(week, role) %>%   # role = PM or MP, grouping all the MPs tgt
+  summarise(text = paste(tweet, collapse = " "), .groups = "drop") #collapsing many tweets into one document and removing the grouping structure, so all the tweets from MPs are grouped
+
+#tokenise
+weekly_dfm <- weekly_text %>%
+  corpus(text_field = "text") %>%
+  tokens(remove_punct = TRUE, remove_numbers = TRUE) %>%
+  dfm()
+
+#compute similarity per week
+weeks <- sort(unique(weekly_text$week))
+results <- data.frame()
+
+for (w in weeks) {
+  
+  # subset dfm to that week
+  dfm_w <- weekly_dfm[docvars(weekly_dfm, "week") == w, ]
+  
+  # compute similarity between all usernames in that week
+  sim_w <- textstat_simil(dfm_w, margin = "documents", method = "cosine")
+  
+  # differetiate PM and MPs
+  pm_row <- which(docvars(dfm_w, "role") == "PM") 
+  mp_row <- which(docvars(dfm_w, "role") == "MP")
+  
+  # average similarity to MPs for that week
+  if (length(pm_row) == 1 && length(mp_row) == 1) { 
+    results <- rbind(results, data.frame( 
+    week = w, 
+    similarity = sim_w[pm_row, mp_row] #Take the cosine similarity between the PM’s weekly document and the MPs’ weekly document
+    ))
+  }
+}
+
+#plot 
+ggplot(results, aes(x = week, y = similarity)) +
+  geom_line(size = 1.2, colour = "steelblue") +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = c(0, 10, 20, 30, 40, 50)) +
+  theme_minimal() +
+  xlab("Week") +
+  ylab("Similarity between PM and MPs (cosine)") +
+  ggtitle("Weekly similarity between MP and PM tweets")
+
+```
+The plot displays the weekly cosine similarity between tweets posted by MPs and those by the Prime Minister, illustrating how closely their communication or content aligns over time based on topics and keywords. Cosine similarity ranges from 0 to 1, with higher values indicating that MPs and the PM are discussing more similar topics. 
+
+Across the most of observed period (from 2017-06-08 to 2018-01-08), the similarity remains high, which ranges between 0.6 to 0.8. It indicates that there was a stable level of alignment in political messaging. A clear deviation occurs around week 20, where similarity drops to roughly 0.5 and even below in around week 30, which indicates a temporary divergence in communication priorities. It reflects there may be political events or issues that prompted MPs to different themes from the PM. Following this dip, similarity rises sharply and reaches the highest point in week 50 at approximately 0.9, which suggests a period that MPs and the PM were emphasising very similar topics during this period. However, their topics became dissimilar right after the peak, and dropped to below 0.6 again.
+
+Overall, the plot highlights both the general consistency of MP–PM topic alignment and the specific weeks where their communication diverges.
